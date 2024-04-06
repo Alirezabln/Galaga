@@ -103,7 +103,7 @@ module rocket(input logic [9:0] x, y,
     };
 
   // Inside rocket module, assuming rocket starts at X=315, Y=460
-    always_ff @(posedge vsync) begin
+    always_comb begin
         if ((x >= 315) && (x <= 325) && 
             (y >= 460) && (y < 468) && 
             rocket_shape[y-460][x-315])  begin
