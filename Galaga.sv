@@ -1,12 +1,26 @@
 // vga.sv
 
 module vga(input  logic clk, reset,
+           input  logic keyright, keyleft,
            output logic vgaclk,          // 25.175 MHz VGA clock 
            output logic hsync, vsync, 
            output logic sync_b, blank_b, // to monitor & DAC 
            output logic [7:0] r, g, b);  // to video DAC 
 
   logic [9:0] x, y; 
+  // logic [9:0] horizontalMove;
+  // always_ff @(posedge vsync, posedge reset) begin
+	// if (reset) begin
+	   // horizontalMove <= 0;
+       // horizontalMove < = 0;
+    // end
+	// else if (keyright)
+	   // horizontalMove <= horizontalMove + 1;
+	// else if (keyleft)
+	   // horizontalMove <= horizontalMove - 1;
+	// else
+	   // horizontalMove <= horizontalMove;
+  // end
 
   // Use a clock divider to create the 25 MHz VGA pixel clock 
   // 25 MHz clk period = 40 ns 
