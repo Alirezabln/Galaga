@@ -1,32 +1,37 @@
 // vga.sv
 
 module vga(input  logic clk, reset,
-           input  logic keyright, keyleft,
+           input  logic keyright, keyleft, keyup, keydown,
            output logic vgaclk,          // 25.175 MHz VGA clock 
            output logic hsync, vsync, 
            output logic sync_b, blank_b, // to monitor & DAC 
            output logic [7:0] r, g, b);  // to video DAC 
 
-  logic [9:0] x, y; 
-  // logic [9:0] horizontalMove;
-  // always_ff @(posedge vsync, posedge reset) begin
-	// if (reset) begin
-	   // horizontalMove <= 0;
-       // horizontalMove < = 0;
-    // end
-	// else if (keyright)
-	   // horizontalMove <= horizontalMove + 1;
-	// else if (keyleft)
-	   // horizontalMove <= horizontalMove - 1;
-	// else
-	   // horizontalMove <= horizontalMove;
-  // end
+  logic [9:0] x, y, horizontalMove, verticalMove;
 
-  // Use a clock divider to create the 25 MHz VGA pixel clock 
-  // 25 MHz clk period = 40 ns 
-  // Screen is 800 clocks wide by 525 tall, but only 640 x 480 used for display 
-  // HSync = 1/(40 ns * 800) = 31.25 kHz 
-  // Vsync = 31.25 KHz / 525 = 59.52 Hz (~60 Hz refresh rate) 
+// Horizontal Movement
+  always_ff @(posedge vsync, posedge reset) begin
+		if (reset) 
+			horizontalMove <= 0;
+		else if ((keyright) && (horizontalMove+10'd325 < 10'd620))
+			horizontalMove <= horizontalMove + 1;
+		else if ((keyleft) && (horizontalMove+10'd325 > 10'd11))
+			horizontalMove <= horizontalMove - 1;
+		else
+			horizontalMove <= horizontalMove;
+	end
+	
+	// Vertical Movement
+	always_ff @(posedge vsync, posedge reset) begin
+		if (reset)
+			verticalMove <= 0;
+		else if ((keyup) && (verticalMove+10'd460 <= 10'd460)) 
+			verticalMove <= verticalMove + 1;
+		else if ((keydown) && (verticalMove +10'd460 >= 10'd30))
+			verticalMove <= verticalMove - 1;
+		else
+			verticalMove <= verticalMove;
+	end
   
   // divide 50 MHz input clock by 2 to get 25 MHz clock
   always_ff @(posedge clk, posedge reset)
@@ -39,7 +44,7 @@ module vga(input  logic clk, reset,
   vgaController vgaCont(vgaclk, reset, hsync, vsync, sync_b, blank_b, x, y); 
 
   // user-defined module to determine pixel color 
-  videoGen videoGen(x, y,vsync, reset, r, g, b);
+  videoGen videoGen(x, y, horizontalMove, verticalMove, vsync, reset, r, g, b);
   
 endmodule 
 
@@ -99,7 +104,7 @@ module videoGen(input logic [9:0] x, y, input logic vsync, reset, output logic [
 endmodule
 
 // display the rocket at the bottom middle of the screen
-module rocket(input logic [9:0] x, y,
+module rocket(input logic [9:0] x, y, horizontalMove, verticalMove,
 				input logic vsync,
 				input logic reset,
 				output logic rpixel);
@@ -116,17 +121,24 @@ module rocket(input logic [9:0] x, y,
       11'b00000100000
     };
 
+	 logic [8:0] xleft, xright, yleft, yright;
+	 assign xleft = 9'd315;
+	 assign xright = 9'd325;
+	 assign yleft = 9'd460;
+	 assign yright = 9'd468;
+
   // Inside rocket module, assuming rocket starts at X=315, Y=460
     always_comb begin
-        if ((x >= 315) && (x <= 325) && 
-            (y >= 460) && (y < 468) && 
-            rocket_shape[y-460][x-315])  begin
+        if ((x-horizontalMove >= xleft) && (x-horizontalMove <= xright) && 
+            (y-verticalMove >= yleft) && (y-verticalMove < yright) && 
+            rocket_shape[y-yleft-verticalMove][x-xleft-horizontalMove])  begin
                 rpixel = 1; // White
             end
         else begin
             rpixel = 0; // Black
         end
     end 
+
 
 endmodule
 
