@@ -21,7 +21,7 @@ module vga(input  logic clk, reset,
   vgaController vgaCont(vgaclk, reset, hsync, vsync, sync_b, blank_b, x, y); 
 
   // user-defined module to determine pixel color 
-  videoGen videoGen(x, y, seed, keyright, keyleft, keyup, keydown, vsync, reset, r, g, b);
+  videoGen videoGen(x, y, seed, keyright, keyleft, keyup, keydown, vsync, reset, vgaclk, r, g, b);
   
 endmodule 
 
@@ -72,29 +72,33 @@ endmodule
 
 
 module videoGen(input logic [9:0] x, y, seed,
-					input logic keyright, keyleft, keyup, keydown, vsync, reset,
+					input logic keyright, keyleft, keyup, keydown, vsync, reset, vgaclk,
 					output logic [7:0] r, g, b); 
-  logic rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, spawnclk;
-  logic [5:0] en;
-  logic [9:0] RNGPos;
-
+  logic rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel, spawnclk, speedclk, gameOver;
+  logic [6:0] en;
+  logic [9:0] RNGPos, speed;
+  
    lfsr lfsr1(vsync, reset, seed, RNGPos);
-   clock clock1(reset, vsync, spawnclk);
+   clock #(8) clock1(reset, vsync, spawnclk);
+   clock #(11) clock2(reset, vsync, speedclk);
+   asteroidSpeed speed1(reset, speedclk, speed);
    asteoridGenerator asteoridGenerator1(reset, spawnclk, en);
 
-  rocket r1(x, y, vsync, reset, keyright, keyleft, keyup, keydown, rpixel);
-  asteroid a1(x, y, RNGPos, reset, vsync, en[0], a1pixel);
-  asteroid a2(x, y, RNGPos, reset, vsync, en[1], a2pixel);
-  asteroid a3(x, y, RNGPos, reset, vsync, en[2], a3pixel);
-  asteroid a4(x, y, RNGPos, reset, vsync, en[3], a4pixel);
-  asteroid a5(x, y, RNGPos, reset, vsync, en[4], a5pixel);
-  asteroid a6(x, y, RNGPos, reset, vsync, en[5], a6pixel);
+  rocket r1(x, y, vsync, reset, keyright, keyleft, keyup, keydown, gameOver, rpixel);
+  asteroid a1(x, y, RNGPos, speed, reset, vsync, en[0], gameOver, a1pixel);
+  asteroid a2(x, y, RNGPos, speed, reset, vsync, en[1], gameOver, a2pixel);
+  asteroid a3(x, y, RNGPos, speed, reset, vsync, en[2], gameOver, a3pixel);
+  asteroid a4(x, y, RNGPos, speed, reset, vsync, en[3], gameOver, a4pixel);
+  asteroid a5(x, y, RNGPos, speed, reset, vsync, en[4], gameOver, a5pixel);
+  asteroid a6(x, y, RNGPos, speed, reset, vsync, en[5], gameOver, a6pixel);
+  asteroid a7(x, y, RNGPos, speed, reset, vsync, en[6], gameOver, a7pixel);
+  gameState state1(reset, vgaclk, rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel, gameOver);
 
   
   always_comb begin
    if (rpixel) 
 			{r, g, b} = 24'hFFFFFF;
-   else if ((a1pixel)|(a2pixel)|(a3pixel)|(a4pixel)|(a5pixel)|(a6pixel)) 
+   else if ((a1pixel)|(a2pixel)|(a3pixel)|(a4pixel)|(a5pixel)|(a6pixel)|(a7pixel)) 
 			{r, g, b} = 24'h8968CD;
    else
 			{r, g, b} = 24'h000000;
@@ -104,7 +108,7 @@ endmodule
 
 // display the rocket at the bottom middle of the screen
 module rocket(input logic [9:0] x, y,
-					input logic vsync, reset, keyright, keyleft, keyup, keydown,
+					input logic vsync, reset, keyright, keyleft, keyup, keydown, gameOver,
 				 output logic rpixel);
 	
     // Data Structure for Rocket Shape
@@ -133,8 +137,10 @@ module rocket(input logic [9:0] x, y,
 	 
 	 // Horizontal Movement
   always_ff @(posedge vsync, posedge reset) begin
-		if (reset) 
+		if (reset)
 			horizontalMove <= 0;
+		else if (gameOver)
+				horizontalMove <= horizontalMove;
 		else if ((keyright) && (horizontalMove+10'd325 < 10'd633))
 			horizontalMove <= horizontalMove + 10'd1;
 		else if ((keyleft) && (horizontalMove+10'd325 > 10'd18))
@@ -147,6 +153,8 @@ module rocket(input logic [9:0] x, y,
 	always_ff @(posedge vsync, posedge reset) begin
 		if (reset)
 			verticalMove <= 0;
+		else if (gameOver)
+			verticalMove <= verticalMove;
 		else if ((keyup) && (verticalMove+10'd460 <= 10'd460)) 
 			verticalMove <= verticalMove + 10'd1;
 		else if ((keydown) && (verticalMove +10'd460 >= 10'd30))
@@ -173,8 +181,8 @@ module rocket(input logic [9:0] x, y,
     end 
 endmodule
 	 
-module asteroid(input logic [9:0] x, y, RNGPos,
-						input logic reset, vsync, en, 
+module asteroid(input logic [9:0] x, y, RNGPos, speed,
+						input logic reset, vsync, en, gameOver,
                 output logic apixel); 
 
 // Data Structure for Asteroid Shape
@@ -213,12 +221,14 @@ logic [19:0][29:0] asteroid_shape = {
 		moveDown <= 0;
 		initialP <= RNGPos;
 		end
+	else if (gameOver)
+		moveDown <= moveDown;
     else if (moveDown >= 10'd480) begin
         moveDown <= 0;
 		initialP <= RNGPos;
 	end
 	else begin
-		moveDown <= moveDown + 10'd1;
+		moveDown <= moveDown + speed;
 		initialP <= initialP;
     end
 	end
@@ -258,18 +268,18 @@ module lfsr(input logic clk, reset,
 endmodule
 
 module asteoridGenerator(input logic reset, clk, 
-						output logic [5:0] en);
-	logic [5:0] count;
+						output logic [6:0] en);
+	logic [6:0] count;
 
 always_ff @(posedge clk, posedge reset) begin
 	if (reset) begin
-		count <= 6'b000000;
+		count <= 7'b0000000;
 	end
-	else if (count == 6'b111111) begin
+	else if (count == 7'b1111111) begin
 		count <= count;
 	end
 	else begin
-		count <= (count << 1) + 6'b000001;
+		count <= (count << 1) + 7'b0000001;
 	end
 	end
 
@@ -277,19 +287,60 @@ always_ff @(posedge clk, posedge reset) begin
 
 endmodule
 
-module clock(input logic reset, vsync,
+module clock
+	#(parameter width = 8)
+	(input logic reset, vsync,
 				output logic clk);
-	logic [7:0] count;
+	logic [width-1:0] count;
 
 	always_ff @(posedge reset, posedge vsync) begin
 		if (reset) begin
-			count <= 8'd0;
+			count <= 0;
 		end
 		else begin
-			count <= count + 8'd1;
+			count <= count + 1;
 		end
 	end
 
-	assign clk = count[7];
+	assign clk = count[width-1];
 
 endmodule
+
+module asteroidSpeed (input logic reset, clk,
+						output logic [9:0] speed);
+
+	logic [9:0] count;
+
+	always_ff @(posedge clk, posedge reset) begin
+		if (reset) begin
+			count <= 10'd1;
+		end
+		else if (count == 10'd3) begin
+			count <= count;
+		end
+		else begin
+			count <= count + 10'd1;
+		end
+	end
+
+	assign speed = count;
+
+endmodule
+
+module gameState(input logic reset, vgaclk, rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel,
+						output logic gameOver);
+						
+  // make a collison detection between rocket and asteroids
+  always_ff @(posedge vgaclk, posedge reset) begin
+	  if (reset) begin
+		gameOver <= 0;
+	  end
+	  else if (rpixel & (a1pixel | a2pixel | a3pixel | a4pixel | a5pixel | a6pixel | a7pixel)) begin
+		gameOver <= 1;
+	  end
+	  	  else begin
+		gameOver <= gameOver;
+	  end
+	  end
+	  
+endmodule 
