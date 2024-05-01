@@ -15,7 +15,7 @@ module spaceDash(input  logic clk, reset,
 
   logic [9:0] x, y;
   logic [3:0] scoreclk;
-  logic gameOver;
+  logic gameOver, start;
 	
   // divide 50 MHz input clock by 2 to get 25 MHz clock
   always_ff @(posedge clk, posedge reset)
@@ -28,10 +28,10 @@ module spaceDash(input  logic clk, reset,
   vgaController vgaCont(vgaclk, reset, hsync, vsync, sync_b, blank_b, x, y); 
 
   // module to control the video output
-  videoGen videoGen(x, y, seed, reset, vgaclk, vsync, keyright, keyleft, keyup, keydown, gameOver,  r, g, b);
+  videoGen videoGen(x, y, seed, reset, vgaclk, vsync, keyright, keyleft, keyup, keydown, start, gameOver,  r, g, b);
 
   // generate clock for score
-  clock #(4) clock0(reset, vsync, scoreclk);
+  clock #(4) clock0(reset, vsync, start,  scoreclk);
 
   // module to control the score
   score score1(reset, scoreclk, gameOver, segments0, segments1, segments2, segments3);
@@ -87,19 +87,23 @@ endmodule
 
 module videoGen(input logic [9:0] x, y, seed,
 					input logic reset, vgaclk, vsync, keyright, keyleft, keyup, keydown, 
-					output logic gameOver,
+					output logic start, gameOver,
 					output logic [7:0] r, g, b); 
 
   logic rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel, spawnclk, speedclk;
   logic [6:0] en;
   logic [9:0] RNGPos, speed;
   
+    // Game Over State
+  gameState state1(reset, vgaclk, keyright, keyleft, keyup, keydown,  
+						rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel, start, gameOver);
+  
   // Generate number for asteroid position
    lfsr lfsr1(reset, vsync, seed, RNGPos);
 
    // Clocks for asteroid spawn and speed
-   clock #(8) clockSpawn(reset, vsync, spawnclk);
-   clock #(11) clockSpeed(reset, vsync, speedclk);
+   clock #(8) clockSpawn(reset, vsync, start, spawnclk);
+   clock #(11) clockSpeed(reset, vsync, start, speedclk);
 
    // Calculate asteroid speed based on speedclock
    asteroidSpeed speed1(reset, speedclk, speed);
@@ -117,9 +121,6 @@ module videoGen(input logic [9:0] x, y, seed,
   asteroid a6(x, y, RNGPos, speed, reset, vsync, en[5], gameOver, a6pixel);
   asteroid a7(x, y, RNGPos, speed, reset, vsync, en[6], gameOver, a7pixel);
 
-  // Game Over State
-  gameState state1(reset, vgaclk, rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel, gameOver);
-
   // Display the rocket and asteroids
   always_comb begin
    if (rpixel) 
@@ -127,7 +128,7 @@ module videoGen(input logic [9:0] x, y, seed,
    else if (a1pixel|a2pixel|a3pixel|a4pixel|a5pixel|a6pixel|a7pixel) 
 			{r, g, b} = 24'h8968CD;
    else
-			{r, g, b} = 24'h000000;
+			{r, g, b} = gameOver? 24'hc61a09 : 24'h000000;
 	end
 
 endmodule
@@ -292,7 +293,7 @@ module lfsr(input logic reset, clk,
 
 endmodule
 
-module asteroidEnable(input logic reset, clk, 
+module asteroidEnable(input logic reset, clk,
 						output logic [6:0] en);
 	logic [6:0] count;
 
@@ -314,7 +315,7 @@ endmodule
 
 module clock
 	#(parameter width = 8)
-	(input logic reset, vsync,
+	(input logic reset, vsync, enable,
 				output logic clk);
 	logic [width-1:0] count;
 
@@ -322,6 +323,9 @@ module clock
 		if (reset) begin
 			count <= 0;
 		end
+		else if (~enable) begin
+			count <= 0;
+			end
 		else begin
 			count <= count + 1;
 		end
@@ -352,23 +356,36 @@ module asteroidSpeed (input logic reset, clk,
 
 endmodule
 
-module gameState(input logic reset, vgaclk, rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel,
-						output logic gameOver);
-						
-  // Collison detection between rocket and asteroids
-  always_ff @(posedge vgaclk, posedge reset) begin
-	  if (reset) begin
-		gameOver <= 0;
-	  end
-	  else if (rpixel & (a1pixel | a2pixel | a3pixel | a4pixel | a5pixel | a6pixel | a7pixel)) begin
-		gameOver <= 1;
-	  end
-	  	  else begin
-		gameOver <= gameOver;
-	  end
-	  end
-	  
-endmodule 
+module gameState(input logic reset, clk, keyright, keyleft, keyup, keydown, 
+							rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel,
+						output logic start, gameOver);
+	
+	typedef enum logic [1:0] {SR, S1, S2}
+	statetype;
+	statetype state, nextstate;
+	
+	always_ff @(posedge clk, posedge reset) begin
+		if (reset) state <= SR;
+		else       state <= nextstate;
+	end
+		
+	always_comb begin
+	case (state)
+		SR: 	if (keyright | keyleft | keyup | keydown) nextstate = S1;
+				else nextstate = SR;
+		// Collison detection between rocket and asteroids
+		S1:		if (rpixel & (a1pixel | a2pixel | a3pixel | a4pixel | a5pixel | a6pixel | a7pixel))	nextstate = S2;
+				else nextstate = S1;
+		S2:			nextstate = S2;
+		default:	nextstate = SR;
+	endcase
+	end
+
+assign start = (state == S1| state == S2);
+assign gameOver = (state == S2);
+
+endmodule
+
 
 // Keep track of score using scoreclk
 module score(input logic reset, scoreclk, gameOver,
