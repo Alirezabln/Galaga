@@ -2,7 +2,7 @@
 
 module SpaceDash_wrapper(input  logic       CLOCK_50,
                           input  logic [10:0] SW,
-                          input logic	[3:0] KEY,
+                          input logic	[3:0] GPIO,
                           output logic       VGA_CLK,	
                           output logic       VGA_HS,
                           output logic       VGA_VS,
@@ -17,7 +17,7 @@ module SpaceDash_wrapper(input  logic       CLOCK_50,
                           output logic [6:0] HEX3);
 						
 
-  spaceDash spaceDash1(CLOCK_50, SW[0], ~KEY[0], ~KEY[1], ~KEY[2], ~KEY[3], SW[10:1],
+  spaceDash spaceDash1(CLOCK_50, SW[0], ~GPIO[0], ~GPIO[1], ~GPIO[2], ~GPIO[3], SW[10:1],
 					    VGA_CLK, VGA_HS, VGA_VS, VGA_SYNC_N, VGA_BLANK_N,
 			            VGA_R, VGA_G, VGA_B, HEX0, HEX1, HEX2, HEX3);
 			 

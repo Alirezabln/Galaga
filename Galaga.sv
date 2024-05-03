@@ -1,5 +1,6 @@
 // spaceDash.sv
-// Alireza Boloutian
+// Alireza Bolourian
+// CPE 200L
 
 module spaceDash(input  logic clk, reset,
 				   input  logic keyright, keyleft, keyup, keydown, 
@@ -84,7 +85,6 @@ module vgaController #(parameter HBP     = 10'd48,   // horizontal back porch
       assign blank_b = (hcnt < HACTIVE) & (vcnt < VACTIVE); 
 endmodule 
 
-
 module videoGen(input logic [9:0] x, y, seed,
 					input logic reset, vgaclk, vsync, keyright, keyleft, keyup, keydown, 
 					output logic start, gameOver,
@@ -94,7 +94,7 @@ module videoGen(input logic [9:0] x, y, seed,
   logic [6:0] en;
   logic [9:0] RNGPos, speed;
   
-    // Game Over State
+  // Manages the game state
   gameState state1(reset, vgaclk, keyright, keyleft, keyup, keydown,  
 						rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel, start, gameOver);
   
@@ -237,7 +237,7 @@ logic [19:0][29:0] asteroid_shape = {
 	
 	 logic [9:0] xleft, xright, ytop, ybottom, moveDown, initialP;
 	 
-     // Asteroid moving down
+     // Asteroid moving down if enabled
 	always_ff @(posedge vsync, posedge reset) begin
 		if (reset) begin
 			moveDown <= 0;
@@ -265,7 +265,7 @@ logic [19:0][29:0] asteroid_shape = {
 	 assign ybottom = 10'd20;
 
 
-  // Inside asteroid module, assuming asteroid starts at X=310, Y=0
+  // Display the asteroid
   always_comb begin
 	if ((en) && (x >= xleft) && (x < xright) &&
         (y-moveDown+10'd470 >= ytop+10'd470) && (y-moveDown+10'd470 < ybottom+10'd470) &&
@@ -278,6 +278,8 @@ logic [19:0][29:0] asteroid_shape = {
   end
 endmodule
 
+
+// Linear Feedback Shift Register
 module lfsr(input logic reset, clk,
 				input logic [9:0] seed,
 				output logic [9:0] RNG);		
@@ -286,13 +288,14 @@ module lfsr(input logic reset, clk,
 	always_ff @(posedge clk, posedge reset) begin
 		if (reset)	begin		count <= seed;
 		end
-		else 					count <= {count[0] ^ count[9], count[9:1]};
+		else 					count <= {count[0] ^ count[9], count[9:1]}; // XOR the first and last bit
 	end 
 
-	assign RNG = count % 10'd641;
+	assign RNG = count % 10'd641; // 640 is the maximum value for x
 
 endmodule
 
+// Clock module for asteroid enable
 module asteroidEnable(input logic reset, clk,
 						output logic [6:0] en);
 	logic [6:0] count;
@@ -313,6 +316,7 @@ always_ff @(posedge clk, posedge reset) begin
 
 endmodule
 
+// Parametrized clock module
 module clock
 	#(parameter width = 8)
 	(input logic reset, vsync, enable,
@@ -335,6 +339,7 @@ module clock
 
 endmodule
 
+// Module controling the speed of the asteroids
 module asteroidSpeed (input logic reset, clk,
 						output logic [9:0] speed);
 
@@ -344,7 +349,7 @@ module asteroidSpeed (input logic reset, clk,
 		if (reset) begin
 			count <= 10'd1;
 		end
-		else if (count == 10'd4) begin
+		else if (count == 10'd4) begin // 4 is the maximum speed
 			count <= count;
 		end
 		else begin
@@ -356,6 +361,7 @@ module asteroidSpeed (input logic reset, clk,
 
 endmodule
 
+// Module to control the game state
 module gameState(input logic reset, clk, keyright, keyleft, keyup, keydown, 
 							rpixel, a1pixel, a2pixel, a3pixel, a4pixel, a5pixel, a6pixel, a7pixel,
 						output logic start, gameOver);
@@ -371,7 +377,7 @@ module gameState(input logic reset, clk, keyright, keyleft, keyup, keydown,
 		
 	always_comb begin
 	case (state)
-		SR: 	if (keyright | keyleft | keyup | keydown) nextstate = S1;
+		SR: 	if (keyright | keyleft | keyup | keydown) nextstate = S1; // Start the game when any key is pressed
 				else nextstate = SR;
 		// Collison detection between rocket and asteroids
 		S1:		if (rpixel & (a1pixel | a2pixel | a3pixel | a4pixel | a5pixel | a6pixel | a7pixel))	nextstate = S2;
